@@ -1,0 +1,32 @@
+import { Button, VerticalBox } from "std-widgets.slint";
+
+export component AppWindow inherits Window {
+    width: 500px;
+    height: 600px;
+    in-out property<int> counter: 10;
+    callback countdown-timer();
+    background: green;
+    always-on-top: true;
+
+    VerticalBox {
+        Text {
+            text: "Please stop working. Go out and enjoy in";
+            wrap: word-wrap;
+            font-size: 20px;
+            horizontal-alignment: center;
+        }
+
+        Text {
+            text: "\{root.counter}s";
+            font-size: 60px;
+            horizontal-alignment: center;
+        }
+        // Button {
+        //     text: "Increase value";
+        //     clicked => {
+        //         //TODO: remove this and start the request automatically
+        //         root.countdown-timer();
+        //     }
+        // }
+    }
+}
