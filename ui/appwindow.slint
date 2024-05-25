@@ -7,6 +7,7 @@ export component AppWindow inherits Window {
     callback countdown-timer();
     background: green;
     always-on-top: true;
+    no-frame: true;
 
     VerticalBox {
         Text {
@@ -21,12 +22,5 @@ export component AppWindow inherits Window {
             font-size: 60px;
             horizontal-alignment: center;
         }
-        // Button {
-        //     text: "Increase value";
-        //     clicked => {
-        //         //TODO: remove this and start the request automatically
-        //         root.countdown-timer();
-        //     }
-        // }
     }
 }
