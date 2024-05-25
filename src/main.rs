@@ -1,35 +1,96 @@
 use std::{
+    path::PathBuf,
     sync::mpsc::channel,
     thread::{sleep, spawn},
     time::Duration,
 };
 slint::include_modules!();
 
-use chrono::{Local, NaiveTime, Timelike};
+use chrono::{Local, NaiveTime, TimeDelta, Timelike};
 
 use system_status_bar_macos::*;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-fn main() {
-    let ui = AppWindow::new().unwrap();
+//TODO: Structure to be serialized into JSON or something else
+struct AppSettings {
+    pub trigger_time: NaiveTime,
+    pub countdown_seconds: u32,
+    pub apps_to_quit: Vec<(String, PathBuf)>,
+}
 
-    // Date to trigger
+struct TriggerCountdownUITime {
+    //TODO: make sure to add a daily_trigger_time and a current_trigger_time
+    //This would replace `repeat_duration_minutes``
+    pub time: NaiveTime,
+    repeat_duration_minutes: Option<i64>,
+}
+
+impl TriggerCountdownUITime {
+    /// Creates a new trigger time from hours and minutes
+    pub fn at(hour: u32, minute: u32) -> Self {
+        let time = NaiveTime::from_hms_opt(hour, minute, 00).unwrap();
+        Self {
+            time,
+            repeat_duration_minutes: None,
+        }
+    }
+
+    /// Returns duration to sleep from current time until next trigger time.
+    /// UI triggers once per day with this setup
+    pub fn sleep_duration_from_now(&mut self) -> Duration {
+        let now = Local::now().naive_local().time();
+        let mut time_difference = self.time - now;
+
+        println!("time different: {}", time_difference);
+        //FIX: this logic is not very good. Need a better logic to trigger every X amount of time.
+        if time_difference.num_milliseconds() < 0 {
+            let time_to_repeat = match self.repeat_duration_minutes {
+                Some(minutes) => TimeDelta::minutes(minutes),
+                None => TimeDelta::hours(24),
+            };
+
+            time_difference = time_difference + time_to_repeat;
+
+            self.time += time_difference;
+        }
+
+        let duration = time_difference.abs().to_std().unwrap();
+        println!("duration to next trigger time: {:?}", duration);
+
+        duration
+    }
+
+    pub fn repeat_in(&mut self, minutes: i64) {
+        self.repeat_duration_minutes = Some(minutes);
+    }
+
+    /// Checks current time against time to trigger UI
+    pub fn is_now(&self) -> bool {
+        let now = Local::now().naive_local().time();
+        let result = now > self.time;
+        println!("trigger time is now?: {}", result);
+
+        result
+    }
+}
+
+fn main() {
     //TODO: add this to a basic struct
     let time_now = Local::now().naive_local().time();
-    let trigger_data_low =
-        NaiveTime::from_hms_opt(time_now.hour(), time_now.minute() + 1, 00).unwrap();
-    let trigger_data_high =
-        NaiveTime::from_hms_opt(time_now.hour(), time_now.minute() + 1, 59).unwrap();
-
-    let time_diff = trigger_data_low - time_now;
-    let sleep_duration = time_diff.to_std().unwrap();
-
-    println!("Sleep duration: {:?}", sleep_duration);
+    // Responsible to trigger UI countdown
+    let mut trigger_time = TriggerCountdownUITime::at(time_now.hour(), time_now.minute() + 1);
+    // Will trigger every 1 minute, for testing purposes at the moment.
+    trigger_time.repeat_in(1);
 
     let (sender, _receiver) = channel::<bool>();
     let sender_run_clone = sender.clone();
     let sender_main_clone = sender.clone();
+
+    //TODO: way to create "multiple windows" is to use the same component
+    // let a = AppWindow::new().unwrap();
+    // a.show().unwrap();
+    let ui = AppWindow::new().unwrap();
 
     ui.on_countdown_timer({
         let ui_handle = ui.as_weak();
@@ -45,6 +106,7 @@ fn main() {
                 } else {
                     println!("Countdown finished!");
                     ui.hide().unwrap();
+                    ui.set_counter(10);
                 }
             });
         }
@@ -55,7 +117,8 @@ fn main() {
         "☀️",
         Menu::new(vec![
             MenuItem::new(format!("version: {}", VERSION), None, None),
-            //TODO remove this item unless there's a reason we would like to trigger the UI manually
+            //TODO remove this item unless there's a reason we would like to trigger the
+            // UI manually
             MenuItem::new(
                 "Run",
                 Some(Box::new(move || {
@@ -74,24 +137,21 @@ fn main() {
     );
 
     let ui_handle = ui.as_weak();
-    let mut is_countdown_running = false;
 
     spawn(move || {
         loop {
-            sleep(sleep_duration);
+            // REVIEW: the loop code runs every `sleep_duration_from_now`
+            // because currently it only triggers UI countdown
+            // However, if we want to check other processes in this thread that are not
+            // tied only to the UI countdown, we should refactor all this of this code.
+            sleep(trigger_time.sleep_duration_from_now());
             // let value = receiver.recv().unwrap();
 
-            let mut launch_countdown = false;
             let time_now = Local::now().naive_local().time();
-
             println!("current time: {}", time_now.to_string());
-            if time_now > trigger_data_low && time_now < trigger_data_high {
-                launch_countdown = true;
-            }
 
-            if launch_countdown && !is_countdown_running {
-                println!("Showing UI!");
-                is_countdown_running = true;
+            if trigger_time.is_now() {
+                println!("Showing Countdown UI!");
                 let ui_handle_copy = ui_handle.clone();
                 let sender_clone = sender_main_clone.clone();
                 let _ = slint::invoke_from_event_loop(move || {
