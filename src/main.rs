@@ -1,9 +1,4 @@
-use std::{
-    path::PathBuf,
-    sync::mpsc::channel,
-    thread::{sleep, spawn},
-    time::Duration,
-};
+use std::{path::PathBuf, sync::mpsc::channel, thread::spawn, time::Duration};
 slint::include_modules!();
 
 use chrono::{Local, NaiveTime, TimeDelta, Timelike};
@@ -83,14 +78,25 @@ fn main() {
     // Will trigger every 1 minute, for testing purposes at the moment.
     trigger_time.repeat_in(1);
 
-    let (sender, _receiver) = channel::<bool>();
-    let sender_run_clone = sender.clone();
-    let sender_main_clone = sender.clone();
+    //TODO: decide if want to change from bool to something else. So far we just have
+    // 2 conditions to send through the channel and a bool is enough:
+    // true - opens settings menu
+    // false - quits application
+    let (sender, receiver) = channel::<bool>();
+    let sender_settings = sender.clone();
+    let sender_quit = sender.clone();
 
-    //TODO: way to create "multiple windows" is to use the same component
-    // let a = AppWindow::new().unwrap();
-    // a.show().unwrap();
     let ui = AppWindow::new().unwrap();
+
+    ui.on_select_active_page({
+        let ui_handle = ui.as_weak();
+        move |active_page_value: i32| {
+            let ui = ui_handle.unwrap();
+
+            ui.set_active_page(active_page_value);
+            ui.invoke_update_page();
+        }
+    });
 
     ui.on_countdown_timer({
         let ui_handle = ui.as_weak();
@@ -112,61 +118,82 @@ fn main() {
         }
     });
 
+    let ui_handle = ui.as_weak();
+
+    let background_thread_handle = spawn(move || {
+        loop {
+            let timeout_value = trigger_time.sleep_duration_from_now();
+
+            let mut show_settings_now = false;
+            // This will wait for the status menus to be pressed, otherwise we just continue
+            // to see if we need to show the countdown
+            if let Ok(value) = receiver.recv_timeout(timeout_value) {
+                show_settings_now = value;
+                // If we actually received a value and it was false,
+                // it means the user wants to quit the application, so we exit the loop
+                // to end the thread
+                if value == false {
+                    println!("Quitting thread");
+                    break;
+                }
+            }
+
+            let time_now = Local::now().naive_local().time();
+            println!("current time: {}", time_now.to_string());
+
+            if show_settings_now {
+                let ui_handle_copy = ui_handle.clone();
+                let _ = slint::invoke_from_event_loop(move || {
+                    ui_handle_copy.unwrap().invoke_select_active_page(1);
+                    let _ = ui_handle_copy.unwrap().show();
+                });
+            }
+
+            if trigger_time.is_now() {
+                let ui_handle_copy = ui_handle.clone();
+                let _ = slint::invoke_from_event_loop(move || {
+                    // When the user doesn't have the settings open, we don't show the countdown UI
+                    if !ui_handle_copy.unwrap().window().is_visible() {
+                        println!("Showing Countdown UI!");
+                        ui_handle_copy.unwrap().invoke_select_active_page(0);
+                        ui_handle_copy.unwrap().invoke_countdown_timer();
+                        ui_handle_copy.unwrap().show().unwrap();
+                    } else {
+                        println!("UI is already opened")
+                    }
+                });
+            }
+        }
+    });
+
     //TODO: create a menu that has settings to setup time, message and programs to close
     let _status_item = StatusItem::new(
         "☀️",
         Menu::new(vec![
             MenuItem::new(format!("version: {}", VERSION), None, None),
-            //TODO remove this item unless there's a reason we would like to trigger the
-            // UI manually
             MenuItem::new(
-                "Run",
+                "Settings",
                 Some(Box::new(move || {
-                    let _ = sender_run_clone.send(true);
+                    let _ = sender_settings.send(true);
                 })),
                 None,
             ),
             MenuItem::new(
-                "Settings",
+                "Quit",
                 Some(Box::new(|| {
-                    println!("clicked!");
+                    let _ = slint::quit_event_loop();
                 })),
                 None,
             ),
         ]),
     );
 
-    let ui_handle = ui.as_weak();
-
-    spawn(move || {
-        loop {
-            // REVIEW: the loop code runs every `sleep_duration_from_now`
-            // because currently it only triggers UI countdown
-            // However, if we want to check other processes in this thread that are not
-            // tied only to the UI countdown, we should refactor all this of this code.
-            sleep(trigger_time.sleep_duration_from_now());
-            // let value = receiver.recv().unwrap();
-
-            let time_now = Local::now().naive_local().time();
-            println!("current time: {}", time_now.to_string());
-
-            if trigger_time.is_now() {
-                println!("Showing Countdown UI!");
-                let ui_handle_copy = ui_handle.clone();
-                let sender_clone = sender_main_clone.clone();
-                let _ = slint::invoke_from_event_loop(move || {
-                    ui_handle_copy.unwrap().invoke_countdown_timer();
-                    ui_handle_copy.unwrap().show().unwrap();
-                    sender_clone.send(false).unwrap();
-                });
-            }
-            // terminator.terminate();
-        }
-    });
-
-    sender.send(false).unwrap();
-
     // The UI event loop needs to run on the main thread. We can then invoke events in this loop
     // from different threads; e.g. show UI, etc
+    // Blocking method until `slint::quit_event_loop()` is called.
     slint::run_event_loop_until_quit().unwrap();
+
+    // Gracefully finish background thread.
+    sender_quit.send(false).unwrap();
+    background_thread_handle.join().unwrap();
 }

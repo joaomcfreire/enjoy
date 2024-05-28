@@ -1,15 +1,20 @@
-import { Button, VerticalBox } from "std-widgets.slint";
+import { Button, VerticalBox, CheckBox } from "std-widgets.slint";
 
 export component AppWindow inherits Window {
+    callback countdown-timer();
+    callback select-active-page(int);
+    callback update-page();
+    in-out property<int> counter: 10;
+    in-out property <int> active-page: 0;
+    in property <color> active-page-background: green;
     width: 500px;
     height: 600px;
-    in-out property<int> counter: 10;
-    callback countdown-timer();
-    background: green;
+    background: active-page-background;
     always-on-top: true;
     no-frame: true;
 
-    VerticalBox {
+    // Countdown page
+    if active-page == 0: VerticalBox {
         Text {
             text: "Please stop working. Go out and enjoy in";
             wrap: word-wrap;
@@ -23,4 +28,26 @@ export component AppWindow inherits Window {
             horizontal-alignment: center;
         }
     }
+    // Settings page
+    if active-page == 1: VerticalBox {
+
+        Text {
+            text: "Setting";
+            wrap: word-wrap;
+            font-size: 20px;
+            horizontal-alignment: left;
+        }
+
+    }
+
+     update-page => {
+        if active-page == 0 {
+            root.background = Colors.green;
+            root.no-frame = true;
+        } else {
+            root.background = Colors.black;
+            root.no-frame = false;
+        }
+    }
+
 }
