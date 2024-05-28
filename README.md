@@ -20,7 +20,8 @@ on a macOS only `system_status_bar_macos` crate.
 
 ## TODO
 List of to-do items:
-- [ ] v0.1: Add settings serialization logic using `serde`
+- [x] v0.1: Add settings serialization logic using `serde`
+- [ ] v0.1: Add trigger time to settings file
 - [ ] v0.1: Build Settings UI state logic based on serialized settings
 
 - [ ] v0.2: "Improve" UI style
