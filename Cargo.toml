@@ -10,7 +10,8 @@ build = "build.rs"
 [dependencies]
 chrono = "0.4.37"
 daemonize = "0.5.0"
-serde_json = "1.0.115"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 slint = "1.4"
 system_status_bar_macos = "0.1.3"
 

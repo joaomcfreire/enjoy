@@ -1,18 +1,15 @@
-use std::{path::PathBuf, sync::mpsc::channel, thread::spawn, time::Duration};
+mod settings;
+
+use std::{fs, path::Path, sync::mpsc::channel, thread::spawn, time::Duration};
 slint::include_modules!();
 
 use chrono::{Local, NaiveTime, TimeDelta, Timelike};
 
 use system_status_bar_macos::*;
 
-const VERSION: &str = env!("CARGO_PKG_VERSION");
+use crate::settings::AppSettings;
 
-//TODO: Structure to be serialized into JSON or something else
-struct AppSettings {
-    pub trigger_time: NaiveTime,
-    pub countdown_seconds: u32,
-    pub apps_to_quit: Vec<(String, PathBuf)>,
-}
+const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 struct TriggerCountdownUITime {
     //TODO: make sure to add a daily_trigger_time and a current_trigger_time
@@ -71,7 +68,12 @@ impl TriggerCountdownUITime {
 }
 
 fn main() {
-    //TODO: add this to a basic struct
+    //Check settings and create default settings if a settings file does not exist
+    let settings_path = Path::new("settings.json");
+    let settings = AppSettings::load_or_create_settings(settings_path);
+
+    println!("Loaded settings: {:?}", settings);
+
     let time_now = Local::now().naive_local().time();
     // Responsible to trigger UI countdown
     let mut trigger_time = TriggerCountdownUITime::at(time_now.hour(), time_now.minute() + 1);
