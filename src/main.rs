@@ -1,6 +1,6 @@
 mod settings;
 
-use std::{fs, path::Path, sync::mpsc::channel, thread::spawn, time::Duration};
+use std::{path::Path, sync::mpsc::channel, thread::spawn, time::Duration};
 slint::include_modules!();
 
 use chrono::{Local, NaiveTime, TimeDelta, Timelike};
