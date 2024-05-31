@@ -43,8 +43,9 @@ impl AppSettings {
 
     pub fn load_or_create_settings(path: &Path) -> AppSettings {
         // Open existing settings or create default ones
-        let settings_string = fs::read_to_string(path).map_or(
-            {
+        let settings_string = fs::read_to_string(path).map_or_else(
+            |_| {
+                println!("No settings file found, generating default settings.");
                 let settings = AppSettings::default();
                 settings.generate_settings_file(path);
                 let settings_string = serde_json::to_string(&settings).unwrap();
